@@ -23,6 +23,8 @@ describe VCR::Archive do
 
     let(:tmpdir) { Dir.mktmpdir }
     let(:uri) { 'http://example.org' }
+    let(:body_string) { 'Hello, world.' }
+
     let(:meta) do
       {
         'http_interactions' => [
@@ -32,30 +34,33 @@ describe VCR::Archive do
             },
             'response' => {
               'body' => {
-                'string' => 'Hello, world.',
+                'string' => body_string,
               },
             },
           },
         ],
       }
     end
-    let(:path) { File.join(tmpdir, 'foo', 'example.org', Digest::SHA1.hexdigest(uri)) }
+
+    let(:path) { File.join(tmpdir, 'foo', 'example.org', uri.to_s.parameterize) }
+    let(:wsdl_path) { File.join(subject.storage_location, uri.to_s.parameterize) }
+    let(:read_xml) { File.read("#{path}.xml") }
+    let(:yaml_path) { path + '.yml' }
+    let(:xml_path) { path + '.xml' }
 
     before { subject.storage_location = tmpdir }
 
     describe '#[]' do
       let(:path) { subject.storage_location + '/foo/example.com/123' }
-      let(:yaml_path) { path + '.yml' }
-      let(:html_path) { path + '.html' }
 
       before { FileUtils.mkdir_p(File.dirname(path)) }
 
       describe 'existing files' do
         before do
           File.write(yaml_path, YAML.dump(meta['http_interactions'].first))
-          html = '<p>Hello, world.</p>'
-          File.write(html_path, html)
-          meta['http_interactions'].first['response']['body']['string'] = html
+          xml = "<p>#{body_string}</p>"
+          File.write(xml_path, xml)
+          meta['http_interactions'].first['response']['body']['string'] = xml
         end
 
         it 'reads from the given file, relative to the configured storage location' do
@@ -71,7 +76,6 @@ describe VCR::Archive do
         end
       end
 
-
       it 'returns nil if the directory does not exist' do
         FileUtils.rm_rf(File.dirname(path))
         assert_nil subject['bar']
@@ -83,16 +87,46 @@ describe VCR::Archive do
       end
     end
 
+    describe 'existing WSDL' do
+      let(:uri) { 'http://example.org?WSDL' }
+      let(:path) { wsdl_path }
+      let(:body_string) { 'Hello, WSDL.' }
+
+      before { FileUtils.mkdir_p(File.dirname(path)) }
+
+      before do
+        File.write(yaml_path, YAML.dump(meta['http_interactions'].first))
+        xml = "<p>#{body_string}</p>"
+        File.write(xml_path, xml)
+        meta['http_interactions'].first['response']['body']['string'] = xml
+      end
+
+      it 'reads WSDL file' do
+        assert_equal meta, subject['foo']
+      end
+    end
+
     describe '#[]=' do
-      it 'writes out response body to an html file' do
+      before do
         subject['foo'] = meta
-        assert_equal 'Hello, world.', File.read("#{path}.html")
       end
 
       it 'writes out the metadata to a yaml file' do
-        subject['foo'] = meta
         expected = { 'request'=> { 'uri' => 'http://example.org' }, 'response' => { 'body' => {} } }
         assert_equal expected, YAML.load_file("#{path}.yml")
+      end
+
+      it 'writes out response body to a xml file' do
+        assert_equal body_string, read_xml
+      end
+
+      describe 'WSDL' do
+        let(:uri) { 'http://example.org?WSDL' }
+        let(:path) { wsdl_path }
+
+        it 'saves WSDL file in a place that it can be reused' do
+          assert_equal body_string, read_xml
+        end
       end
     end
   end

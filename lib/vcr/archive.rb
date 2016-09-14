@@ -1,5 +1,6 @@
 require 'vcr'
 require 'yaml'
+require 'active_support/inflector'
 
 require 'vcr/archive/version'
 
@@ -34,10 +35,12 @@ module VCR
       def [](file_name)
         path = absolute_path_to_file(file_name)
         files = Dir.glob("#{path}/**/*.yml")
+        parent_path = File.expand_path(File.join(path, '..'))
+        files += Dir.glob("#{parent_path}/*.yml")
         return nil unless files.any?
         interactions = files.map do |f|
           meta = YAML.load_file(f)
-          body = File.binread(f.sub(/\.yml$/, '.html'))
+          body = File.binread(f.sub(/\.yml$/, '.xml'))
           meta['response']['body']['string'] = body
           meta
         end
@@ -50,12 +53,16 @@ module VCR
         path = absolute_path_to_file(file_name)
         meta['http_interactions'].each do |interaction|
           uri = URI.parse(interaction['request']['uri'])
-          file_path = File.join(path, uri.host, Digest::SHA1.hexdigest(uri.to_s))
+          if uri.to_s.downcase.include? 'wsdl'
+            file_path = File.expand_path(File.join(path, '..', uri.to_s.parameterize))
+          else
+            file_path = File.join(path, uri.host, uri.to_s.parameterize)
+          end
           directory = File.dirname(file_path)
           FileUtils.mkdir_p(directory) unless File.exist?(directory)
           body = interaction['response']['body'].delete('string')
           File.binwrite("#{file_path}.yml", YAML.dump(interaction))
-          File.binwrite("#{file_path}.html", body)
+          File.binwrite("#{file_path}.xml", body)
         end
       end
 
