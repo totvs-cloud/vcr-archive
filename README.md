@@ -25,22 +25,25 @@ gem install vcr-archive
 ## Usage
 
 ```ruby
+# code omitted
 require 'vcr/archive'
-require 'open-uri'
 
 VCR.configure do |config|
   config.hook_into :webmock
   config.cassette_serializers[:vcr_archive] = VCR::Archive::Serializer
   config.cassette_persisters[:vcr_archive] = VCR::Archive::Persister
-  config.default_cassette_options = { serialize_with: :vcr_archive, persist_with: :vcr_archive }
+  config.default_cassette_options = {
+    record: :new_episodes,
+    match_requests_on: [:uri, :body, :headers],
+    serialize_with: :vcr_archive,
+    persist_with: :vcr_archive
+  }
 end
 
-VCR::Archive::Persister.storage_location = '/tmp'
-
-VCR.use_cassette('vcr_cassettes/readme_example') do
-  response = open('http://example.org/').read
-  # ...
+VCR.use_cassette('cassete_name_here') do
+  # code omitted
 end
+# code omitted
 ```
 
 After running this the response from http://example.org/ will be archived into the directory given as an argument to `VCR.use_cassette`.
